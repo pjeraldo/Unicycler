@@ -6,7 +6,7 @@ https://github.com/rrwick/Unicycler
 This module contains the main script for the Unicycler assembly polisher. It is executed when a
 user runs `unicycler_polish` (after installation) or `unicycler_polish-runner.py`.
 
-It uses Pilon, Arrow, Racon and Freebayes (as appropriate for the input reads) to repeatedly polish
+It uses Pilon, gcpp, Racon and Freebayes (as appropriate for the input reads) to repeatedly polish
 the assembly. The assembly quality is quantified using ALE and polishing will continue until no
 more improvements are possible.
 
@@ -63,7 +63,7 @@ def main():
         current, round_num = long_read_polish_small_changes_loop(current, round_num, args, short,
                                                                  all_ale_scores)
     if pacbio:
-        current, round_num = full_arrow_loop(current, round_num, args, short, all_ale_scores)
+        current, round_num = full_gcpp_loop(current, round_num, args, short, all_ale_scores)
 
     if short and pacbio:
         current, round_num = ale_assessed_changes_loop(current, round_num, args, short, pacbio,
@@ -88,7 +88,7 @@ def get_arguments():
                              help='FASTQ file of short reads (second reads in each pair)')
 
     pacbio_group = parser.add_argument_group('PacBio reads',
-                                             'To polish with PacBio reads (using Arrow), provide '
+                                             'To polish with PacBio reads (using GCPP), provide '
                                              'one of the following')
     pacbio_group.add_argument('--pb_bax', nargs='+', type=str,
                               help='PacBio raw bax.h5 read files')
@@ -156,10 +156,10 @@ def get_arguments():
                                   'bin and lib directories)')
     tools_group.add_argument('--bax2bam', type=str, default='bax2bam',
                              help='path to bax2bam executable')
-    tools_group.add_argument('--pbalign', type=str, default='pbalign',
-                             help='path to pbalign executable')
-    tools_group.add_argument('--arrow', type=str, default='arrow',
-                             help='path to arrow executable')
+    tools_group.add_argument('--pbmm2', type=str, default='pbmm2',
+                             help='path to pbmm2 executable')
+    tools_group.add_argument('--gcpp', type=str, default='gcpp',
+                             help='path to gcpp executable')
     tools_group.add_argument('--pilon', type=str, default='pilon*.jar',
                              help='path to pilon jar file')
     tools_group.add_argument('--java', type=str, default='java',
@@ -188,7 +188,7 @@ def get_arguments():
     if short_read_input_count == 1:
         parser.error('you must provide both short read files (with -1 and -2) or neither of them')
 
-    pacbio_input_count = sum(0 if x is None else 1 for x in [args.pb_bax, args.pb_bam, 
+    pacbio_input_count = sum(0 if x is None else 1 for x in [args.pb_bax, args.pb_bam,
                                                              args.pb_fasta])
     if pacbio_input_count > 1:
         parser.error('only one of the following PacBio inputs can be used: --pb_bax, --pb_bam, '
@@ -219,13 +219,13 @@ def print_intro_message(verbosity, full_command):
     print('Command: ' + bold(full_command))
 
 
-def clean_up(args, pbalign_alignments=True, illumina_alignments=True, long_read_alignments=True,
+def clean_up(args, pbmm2_alignments=True, illumina_alignments=True, long_read_alignments=True,
              indices=True, variants=True, ale_scores=True):
     all_files = get_all_files_in_current_dir()
     files_to_delete = []
 
-    if pbalign_alignments:
-        files_to_delete += [f for f in all_files if f.startswith('pbalign_align')]
+    if pbmm2_alignments:
+        files_to_delete += [f for f in all_files if f.startswith('pbmm2_align')]
     if illumina_alignments:
         files_to_delete += [f for f in all_files if f.startswith('illumina_align')]
     if indices:
@@ -288,13 +288,13 @@ def get_tool_paths(args, short, pacbio, long_reads):
             add_to_env_var('PYTHONPATH', os.path.join(args.pitchfork, 'lib', 'python2.7',
                                                       'dist-packages'))
 
-        args.pbalign = shutil.which(args.pbalign)
-        if not args.pbalign:
-            sys.exit('Error: could not find pbalign')
+        args.pbmm2 = shutil.which(args.pbmm2)
+        if not args.pbmm2:
+            sys.exit('Error: could not find pbmm2')
 
-        args.arrow = shutil.which(args.arrow)
-        if not args.arrow:
-            sys.exit('Error: could not find arrow')
+        args.gcpp = shutil.which(args.gcpp)
+        if not args.gcpp:
+            sys.exit('Error: could not find gcpp')
 
     if long_reads:
         args.minimap2 = shutil.which(args.minimap2)
@@ -333,7 +333,7 @@ def get_tool_paths(args, short, pacbio, long_reads):
 
 def make_pacbio_reads_bam(args):
     # TO DO: this function should be able to take multiple SMRT cells and run bax2bam on each group
-    # of three bax files. It can then make a fofn for pbalign.
+    # of three bax files. It can then make a fofn for pbmm2.
     # http://seqanswers.com/forums/showthread.php?p=202314
     print_round_header('Converting bax.h5 reads to BAM format', args.verbosity)
     args.pb_bam = 'subreads.bam'
@@ -424,28 +424,28 @@ def pilon_large_changes(fasta, round_num, args, all_ale_scores):
     return current, round_num, applied_variant
 
 
-def full_arrow_loop(current, round_num, args, short, all_ale_scores):
+def full_gcpp_loop(current, round_num, args, short, all_ale_scores):
     """
-    Repeatedly apply both small and large variants using Arrow.
+    Repeatedly apply both small and large variants using GCPP.
     """
     while True:
-        # The arrow_small_changes_loop function doesn't apply large variants, but it does collect
-        # them. If it finds some, they are passed to the arrow_large_changes function (so we don't
-        # have to run arrow again).
-        current, round_num, large_changes = arrow_small_changes_loop(current, round_num, args,
+        # The gcpp_small_changes_loop function doesn't apply large variants, but it does collect
+        # them. If it finds some, they are passed to the gcpp_large_changes function (so we don't
+        # have to run gcpp again).
+        current, round_num, large_changes = gcpp_small_changes_loop(current, round_num, args,
                                                                      short, all_ale_scores)
         if not large_changes:
             break
-        current, round_num, variants = arrow_large_changes(current, round_num, args,
+        current, round_num, variants = gcpp_large_changes(current, round_num, args,
                                                            all_ale_scores, large_changes)
         if not variants:
             break
     return current, round_num
 
 
-def arrow_small_changes_loop(current, round_num, args, short, all_ale_scores):
+def gcpp_small_changes_loop(current, round_num, args, short, all_ale_scores):
     """
-    Repeatedly apply small variants using Arrow.
+    Repeatedly apply small variants using gcpp.
     """
     # Convert bax.h5 files to a PacBio BAM, if necessary.
     if args.pb_bax and not args.pb_bam:
@@ -466,7 +466,7 @@ def arrow_small_changes_loop(current, round_num, args, short, all_ale_scores):
     previously_applied_variants = []
     overlap_counter = 0
     while True:
-        current, round_num, variants, large_variants = arrow_small_changes(current, round_num,
+        current, round_num, variants, large_variants = gcpp_small_changes(current, round_num,
                                                                            args, short,
                                                                            all_ale_scores)
         # If no more changes are suggested, then we're done!
@@ -487,7 +487,7 @@ def arrow_small_changes_loop(current, round_num, args, short, all_ale_scores):
     return current, round_num, large_variants
 
 
-def arrow_small_changes(fasta, round_num, args, short, all_ale_scores):
+def gcpp_small_changes(fasta, round_num, args, short, all_ale_scores):
     round_num += 1
     print_round_header('Round ' + str(round_num) + ': PacBio polish, small variants',
                        args.verbosity)
@@ -497,8 +497,8 @@ def arrow_small_changes(fasta, round_num, args, short, all_ale_scores):
     polished_fasta = '%03d' % round_num + '_3_polish.fasta'
 
     align_pacbio_reads(fasta, args)
-    run_arrow(fasta, args, raw_variants_file)
-    raw_variants = load_variants_from_arrow(raw_variants_file, fasta, args)
+    run_gcpp(fasta, args, raw_variants_file)
+    raw_variants = load_variants_from_gcpp(raw_variants_file, fasta, args)
 
     small_variants = [x for x in raw_variants if not x.large]
     large_variants = [x for x in raw_variants if x.large]
@@ -509,7 +509,7 @@ def arrow_small_changes(fasta, round_num, args, short, all_ale_scores):
             variant.assess_against_illumina_alignments(fasta, args)
     clean_up(args)
 
-    filtered_variants = filter_arrow_small_variants(small_variants, raw_variants_file,
+    filtered_variants = filter_gcpp_small_variants(small_variants, raw_variants_file,
                                                     filtered_variants_file, args, short)
     if filtered_variants:
         apply_variants(fasta, filtered_variants, polished_fasta)
@@ -521,10 +521,10 @@ def arrow_small_changes(fasta, round_num, args, short, all_ale_scores):
     return current, round_num, filtered_variants, large_variants
 
 
-def arrow_large_changes(fasta, round_num, args, all_ale_scores, large_changes):
+def gcpp_large_changes(fasta, round_num, args, all_ale_scores, large_changes):
     current, round_num, applied_variant = ale_assessed_changes(fasta, round_num, args, False, True,
                                                                all_ale_scores, '',
-                                                               'Arrow polish, large variants, '
+                                                               'gcpp polish, large variants, '
                                                                'ALE assessed',
                                                                variants=large_changes)
     return current, round_num, applied_variant
@@ -778,7 +778,7 @@ def ale_assessed_changes(fasta, round_num, args, short, pacbio, all_ale_scores, 
     print_round_header('Round ' + str(round_num) + ': ' + round_title, args.verbosity)
 
     # If this function was passed some variants, then we use those. If not, we run Pilon and/or
-    # Arrow to get the variants.
+    # gcpp to get the variants.
     file_num = 0
     if variants is None:
         variants = []
@@ -789,8 +789,8 @@ def ale_assessed_changes(fasta, round_num, args, short, pacbio, all_ale_scores, 
                                            'illumina_alignments.bam')
         if pacbio:
             file_num += 1
-            arrow_variants_file = '%03d' % round_num + '_' + str(file_num) + '_arrow.gff'
-            variants += get_arrow_variants(fasta, args, arrow_variants_file)
+            gcpp_variants_file = '%03d' % round_num + '_' + str(file_num) + '_gcpp.gff'
+            variants += get_gcpp_variants(fasta, args, gcpp_variants_file)
 
         if not variants:
             clean_up(args)
@@ -936,19 +936,19 @@ def align_illumina_reads(fasta, args, make_bam_index=True, local=False, keep_una
 
 def align_pacbio_reads(fasta, args):
     reads = args.pb_bam if args.pb_bam else args.pb_fasta
-    command = [args.pbalign, '--nproc', str(args.threads),
-               '--minLength', str(args.min_align_length),
-               '--algorithmOptions="--minRawSubreadScore 800 --bestn 1"',
-               reads, fasta, 'pbalign_alignments.bam']
+    command = [args.pbmm2, 'align', '--num-threads', str(args.threads),
+               '--min-length', str(args.min_align_length),
+               '--best-n', '1', '--sort', '--log-level','DEBUG',
+               reads, fasta, 'pbmm2_alignments.bam']
 
     run_command(command, args, nice=True)
     files = get_all_files_in_current_dir()
-    if 'pbalign_alignments.bam' not in files:
-        sys.exit('Error: pbalign failed to make pbalign_alignments.bam')
-    if 'pbalign_alignments.bam.pbi' not in files:
-        sys.exit('Error: pbalign failed to make pbalign_alignments.bam.pbi')
-    if 'pbalign_alignments.bam.bai' not in files:
-        sys.exit('Error: pbalign failed to make pbalign_alignments.bam.bai')
+    if 'pbmm2_alignments.bam' not in files:
+        sys.exit('Error: pbmm2 failed to make pbmm2_alignments.bam')
+    # if 'pbmm2_alignments.bam.pbi' not in files:
+    #     sys.exit('Error: pbmm2 failed to make pbmm2_alignments.bam.pbi')
+    if 'pbmm2_alignments.bam.bai' not in files:
+        sys.exit('Error: pbmm2 failed to make pbmm2_alignments.bam.bai')
 
 
 def run_pilon(fasta, args, raw_pilon_changes_filename, fix_type, alignments):
@@ -973,25 +973,25 @@ def get_pilon_variants(fasta, args, fix_type, raw_pilon_changes, alignments, cle
     return load_variants_from_pilon_changes(raw_pilon_changes, fasta, args.large)
 
 
-def get_arrow_variants(fasta, args, raw_arrow_variants):
+def get_gcpp_variants(fasta, args, raw_gcpp_variants):
     """
-    Returns Arrow's suggested variants (but doesn't apply them to anything).
+    Returns gcpp's suggested variants (but doesn't apply them to anything).
     """
     align_pacbio_reads(fasta, args)
-    run_arrow(fasta, args, raw_arrow_variants)
-    return load_variants_from_arrow(raw_arrow_variants, fasta, args)
+    run_gcpp(fasta, args, raw_gcpp_variants)
+    return load_variants_from_gcpp(raw_gcpp_variants, fasta, args)
 
 
-def run_arrow(fasta, args, raw_variants_filename):
+def run_gcpp(fasta, args, raw_variants_filename):
     subprocess.call([args.samtools, 'faidx', fasta])
-    command = [args.arrow, 'pbalign_alignments.bam', '-j', str(args.threads),
-               '--noEvidenceConsensusCall', 'reference', '-r', fasta, '-o', raw_variants_filename]
+    command = [args.gcpp, 'pbmm2_alignments.bam', '-j', str(args.threads),
+               '--no-evidence-call', 'reference', '-r', fasta, '-o', raw_variants_filename]
     run_command(command, args, nice=True)
     if raw_variants_filename not in get_all_files_in_current_dir():
-        sys.exit('Error: Arrow failed to make ' + raw_variants_filename)
+        sys.exit('Error: gcpp failed to make ' + raw_variants_filename)
 
 
-def filter_arrow_small_variants(raw_variants, raw_variants_gff, filtered_variants_gff, args,
+def filter_gcpp_small_variants(raw_variants, raw_variants_gff, filtered_variants_gff, args,
                                 short_read_assessed):
     filtered_variants = []
     variant_rows = []
@@ -1232,7 +1232,7 @@ def finish(current, all_ale_scores, round_num, args, short):
 
         if args.verbosity > 0:
             print_table(ale_results_table, alignments='LRR', row_colour={best_table_row: 'green'},
-                        row_extra_text={best_table_row: ' ' + get_left_arrow() + 'best'},
+                        row_extra_text={best_table_row: ' ' + get_left_gcpp() + 'best'},
                         leading_newline=True,
                         sub_colour=sub_colour)
 
@@ -1258,7 +1258,7 @@ def run_command(command, args, nice=False):
         sys.exit(e.output.decode())
 
 
-def load_variants_from_arrow(gff_file, fasta, args):
+def load_variants_from_gcpp(gff_file, fasta, args):
     reference = dict(load_fasta(fasta))
     variants = []
     with open(gff_file, 'rt') as gff:
@@ -1324,7 +1324,7 @@ class Variant(object):
 
         if gff_line:
             # https://github.com/PacificBiosciences/GenomicConsensus/blob/master/doc/VariantsGffSpecification.rst
-            self.source = 'Arrow'
+            self.source = 'GCPP'
             line_parts = gff_line.split('\t')
             attributes = {x.split('=')[0]: x.split('=')[1] for x in line_parts[8].split(';')}
             self.ref_name = line_parts[0]
