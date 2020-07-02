@@ -96,6 +96,8 @@ def get_arguments():
                               help='PacBio BAM read file')
     pacbio_group.add_argument('--pb_fasta', type=str,
                               help='FASTA file of PacBio reads')
+    pabcio_group.add_argument('--pb_legacy', action='store_true',
+                              help='PacBio legacy mode for RSII chemistries. Uses variantCaller/arrow instead of GCPP/arrow')
 
     nanopore_group = parser.add_argument_group('Generic long reads',
                                                'To polish with generic long reads, provide the '
@@ -160,6 +162,8 @@ def get_arguments():
                              help='path to pbmm2 executable')
     tools_group.add_argument('--gcpp', type=str, default='gcpp',
                              help='path to gcpp executable')
+    tools_group.add_argument('--arrow', type=str, default='arrow',
+                             help='path to arrow executable')
     tools_group.add_argument('--pilon', type=str, default='pilon*.jar',
                              help='path to pilon jar file')
     tools_group.add_argument('--java', type=str, default='java',
@@ -295,6 +299,11 @@ def get_tool_paths(args, short, pacbio, long_reads):
         args.gcpp = shutil.which(args.gcpp)
         if not args.gcpp:
             sys.exit('Error: could not find gcpp')
+
+        if args.pb_legacy:
+            args.arrow = shutil.which(args.arrow)
+            if not args.arrow:
+                sys.exit('Error: could not find arrow')
 
     if long_reads:
         args.minimap2 = shutil.which(args.minimap2)
@@ -497,7 +506,12 @@ def gcpp_small_changes(fasta, round_num, args, short, all_ale_scores):
     polished_fasta = '%03d' % round_num + '_3_polish.fasta'
 
     align_pacbio_reads(fasta, args)
-    run_gcpp(fasta, args, raw_variants_file)
+
+    if args.pb_legacy:
+        run_arrow(fasta, args, raw_variants_file)
+    else:
+        run_gcpp(fasta, args, raw_variants_file)
+
     raw_variants = load_variants_from_gcpp(raw_variants_file, fasta, args)
 
     small_variants = [x for x in raw_variants if not x.large]
@@ -978,7 +992,10 @@ def get_gcpp_variants(fasta, args, raw_gcpp_variants):
     Returns gcpp's suggested variants (but doesn't apply them to anything).
     """
     align_pacbio_reads(fasta, args)
-    run_gcpp(fasta, args, raw_gcpp_variants)
+    if args.pb_legacy:
+        run_arrow(fasta, args, raw_gcpp_variants)
+    else:
+        run_gcpp(fasta, args, raw_gcpp_variants)
     return load_variants_from_gcpp(raw_gcpp_variants, fasta, args)
 
 
@@ -990,6 +1007,13 @@ def run_gcpp(fasta, args, raw_variants_filename):
     if raw_variants_filename not in get_all_files_in_current_dir():
         sys.exit('Error: gcpp failed to make ' + raw_variants_filename)
 
+def run_arrow(fasta, args, raw_variants_filename):
+    subprocess.call([args.samtools, 'faidx', fasta])
+    command = [args.arrow, 'pbmm2_alignments.bam', '-j', str(args.threads),
+               '--noEvidenceConsensusCall', 'reference', '-r', fasta, '-o', raw_variants_filename]
+    run_command(command, args, nice=True)
+    if raw_variants_filename not in get_all_files_in_current_dir():
+        sys.exit('Error: gcpp failed to make ' + raw_variants_filename)
 
 def filter_gcpp_small_variants(raw_variants, raw_variants_gff, filtered_variants_gff, args,
                                 short_read_assessed):
