@@ -96,7 +96,7 @@ def get_arguments():
                               help='PacBio BAM read file')
     pacbio_group.add_argument('--pb_fasta', type=str,
                               help='FASTA file of PacBio reads')
-    pabcio_group.add_argument('--pb_legacy', action='store_true',
+    pacbio_group.add_argument('--pb_legacy', action='store_true',
                               help='PacBio legacy mode for RSII chemistries. Uses variantCaller/arrow instead of GCPP/arrow')
 
     nanopore_group = parser.add_argument_group('Generic long reads',
