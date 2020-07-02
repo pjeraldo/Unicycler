@@ -164,6 +164,8 @@ def get_arguments():
                              help='path to gcpp executable')
     tools_group.add_argument('--arrow', type=str, default='arrow',
                              help='path to arrow executable')
+    tools_group.add_argument('--pbindex', type=str, default='pbindex',
+                             help='path to pbindex executable')
     tools_group.add_argument('--pilon', type=str, default='pilon*.jar',
                              help='path to pilon jar file')
     tools_group.add_argument('--java', type=str, default='java',
@@ -304,6 +306,9 @@ def get_tool_paths(args, short, pacbio, long_reads):
             args.arrow = shutil.which(args.arrow)
             if not args.arrow:
                 sys.exit('Error: could not find arrow')
+            args.pbindex = shutil.which(args.pbindex)
+            if not args.pbindex:
+                sys.exit('Error: could not find pbindex')
 
     if long_reads:
         args.minimap2 = shutil.which(args.minimap2)
@@ -956,11 +961,14 @@ def align_pacbio_reads(fasta, args):
                reads, fasta, 'pbmm2_alignments.bam']
 
     run_command(command, args, nice=True)
+    if args.pb_legacy:
+        run_command([args.pbindex, 'pbmm2_alignments.bam'], args)
+
     files = get_all_files_in_current_dir()
     if 'pbmm2_alignments.bam' not in files:
         sys.exit('Error: pbmm2 failed to make pbmm2_alignments.bam')
-    # if 'pbmm2_alignments.bam.pbi' not in files:
-    #     sys.exit('Error: pbmm2 failed to make pbmm2_alignments.bam.pbi')
+    if args.pb_legacy and 'pbmm2_alignments.bam.pbi' not in files:
+        sys.exit('Error: pbmm2 failed to make pbmm2_alignments.bam.pbi')
     if 'pbmm2_alignments.bam.bai' not in files:
         sys.exit('Error: pbmm2 failed to make pbmm2_alignments.bam.bai')
 
