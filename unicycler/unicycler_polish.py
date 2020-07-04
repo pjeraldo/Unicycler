@@ -261,15 +261,15 @@ def get_tool_paths(args, short, pacbio, long_reads):
     args.samtools = shutil.which(args.samtools)
     if not args.samtools:
         sys.exit('Error: could not find samtools')
+    args.bowtie2 = shutil.which(args.bowtie2)
+    if not args.bowtie2:
+        sys.exit('Error: could not find bowtie2')
+    args.bowtie2_build = shutil.which(args.bowtie2 + '-build')
+    if not args.bowtie2_build:
+        sys.exit('Error: could not find bowtie2-build (it should be in the same place as '
+                 'bowtie2)')
 
     if short:
-        args.bowtie2 = shutil.which(args.bowtie2)
-        if not args.bowtie2:
-            sys.exit('Error: could not find bowtie2')
-        args.bowtie2_build = shutil.which(args.bowtie2 + '-build')
-        if not args.bowtie2_build:
-            sys.exit('Error: could not find bowtie2-build (it should be in the same place as '
-                     'bowtie2)')
 
         if args.pilon == 'pilon*.jar':
             args.pilon = get_pilon_jar_path(None)
@@ -541,7 +541,7 @@ def gcpp_small_changes(fasta, round_num, args, short, all_ale_scores):
 
 
 def gcpp_large_changes(fasta, round_num, args, all_ale_scores, large_changes):
-    current, round_num, applied_variant = ale_assessed_changes(fasta, round_num, args, False, True,
+    current, round_num, applied_variant = ale_assessed_changes(fasta, round_num, args, short=False, pacbio=True,
                                                                all_ale_scores, '',
                                                                'gcpp polish, large variants, '
                                                                'ALE assessed',
@@ -822,7 +822,7 @@ def ale_assessed_changes(fasta, round_num, args, short, pacbio, all_ale_scores, 
 
     open(filtered_variants_file, 'a').close()
 
-    initial_ale_score = run_ale(fasta, args, ale_outputs)
+    initial_ale_score = run_ale(fasta, args, ale_outputs, short, pacbio)
     best_ale_score = initial_ale_score
     best_modification = None
     applied_variant = []
@@ -830,7 +830,7 @@ def ale_assessed_changes(fasta, round_num, args, short, pacbio, all_ale_scores, 
     for i, variant in enumerate(variants):
         modified_assembly = 'variant_' + str(i+1) + '.fasta'
         apply_variants(fasta, [variant], modified_assembly)
-        variant.ale_score = run_ale(modified_assembly, args, ale_outputs)
+        variant.ale_score = run_ale(modified_assembly, args, ale_outputs, short, pacbio)
         if variant.ale_score > best_ale_score:
             best_ale_score = variant.ale_score
             best_modification = modified_assembly
@@ -841,7 +841,7 @@ def ale_assessed_changes(fasta, round_num, args, short, pacbio, all_ale_scores, 
     if len(variants) > 1:
         modified_assembly = 'variant_all.fasta'
         apply_variants(fasta, variants, modified_assembly)
-        all_variants_ale_score = run_ale(modified_assembly, args, ale_outputs)
+        all_variants_ale_score = run_ale(modified_assembly, args, ale_outputs, short, pacbio)
         if all_variants_ale_score > best_ale_score:
             best_ale_score = all_variants_ale_score
             best_modification = modified_assembly
@@ -874,7 +874,7 @@ def get_ale_score(fasta, all_ale_scores, args):
     return all_ale_scores[fasta]
 
 
-def run_ale(fasta, args, all_ale_outputs):
+def run_ale(fasta, args, all_ale_outputs, short=True, pacbio=False):
     """
     ALE is run in --metagenome mode because this polishing script is presumed to be used on
     completed bacterial genomes, where each contig is different replicon (chromosome or plasmid)
@@ -888,12 +888,19 @@ def run_ale(fasta, args, all_ale_outputs):
     ale_score = float('-inf')
     previous_output_exists = os.path.getsize(all_ale_outputs) > 0
 
-    align_illumina_reads(fasta, args, local=False, keep_unaligned=True)
+    #Use illumina for ALE assessment, unless there ate 
+
+    if pacbio:
+        align_pacbio_reads(fasta, args)
+        output_bam='pbmm2_alignments.bam'
+    else:
+        align_illumina_reads(fasta, args, local=False, keep_unaligned=True)
+        output_bam='illumina_alignments.bam'
 
     run_command([args.ale,
                  '--nout',
                  '--metagenome',
-                 'illumina_alignments.bam', fasta, ale_output], args)
+                 output_bam, fasta, ale_output], args)
     if not os.path.isfile(ale_output):
         sys.exit('Error: ALE did not generate ' + ale_output)
 
