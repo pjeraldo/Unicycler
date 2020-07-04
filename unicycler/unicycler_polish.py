@@ -541,7 +541,7 @@ def gcpp_small_changes(fasta, round_num, args, short, all_ale_scores):
 
 
 def gcpp_large_changes(fasta, round_num, args, all_ale_scores, large_changes):
-    current, round_num, applied_variant = ale_assessed_changes(fasta, round_num, args, short=False, pacbio=True,
+    current, round_num, applied_variant = ale_assessed_changes(fasta, round_num, args, False, True,
                                                                all_ale_scores, '',
                                                                'gcpp polish, large variants, '
                                                                'ALE assessed',
@@ -888,7 +888,7 @@ def run_ale(fasta, args, all_ale_outputs, short=True, pacbio=False):
     ale_score = float('-inf')
     previous_output_exists = os.path.getsize(all_ale_outputs) > 0
 
-    #Use illumina for ALE assessment, unless there ate 
+    #Use illumina for ALE assessment, unless there ate
 
     if pacbio:
         align_pacbio_reads(fasta, args)
