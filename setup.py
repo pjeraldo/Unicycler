@@ -99,30 +99,30 @@ class UnicyclerInstall(install):
                 sys.exit('Error: no write permission for ' + self.install_scripts + '  ' +
                          'Perhaps you need to use sudo?')
 
-            # Clean up any previous Unicycler compilation.
-            clean_cmd = ['make', 'distclean']
-            self.execute(lambda: subprocess.call(clean_cmd), [],
-                         'Cleaning previous compilation: ' + ' '.join(clean_cmd))
+            # # Clean up any previous Unicycler compilation.
+            # clean_cmd = ['make', 'distclean']
+            # self.execute(lambda: subprocess.call(clean_cmd), [],
+            #              'Cleaning previous compilation: ' + ' '.join(clean_cmd))
+            #
+            # # Build Unicycler's C++ code.
+            # make_cmd = ['make']
+            # try:
+            #     make_cmd += ['-j', str(min(8, multiprocessing.cpu_count()))]
+            # except NotImplementedError:
+            #     pass
+            # if self.makeargs:
+            #     make_cmd += shlex.split(self.makeargs)
+            # self.execute(lambda: subprocess.call(make_cmd), [],
+            #              'Compiling Unicycler: ' + ' '.join(make_cmd))
+            # cpp_code = os.path.join('unicycler', 'cpp_functions.so')
+            # if not os.path.isfile(cpp_code):
+            #     sys.exit("Error: compilation of Unicycler's C++ component failed")
+            #
+            # install.run(self)
 
-            # Build Unicycler's C++ code.
-            make_cmd = ['make']
-            try:
-                make_cmd += ['-j', str(min(8, multiprocessing.cpu_count()))]
-            except NotImplementedError:
-                pass
-            if self.makeargs:
-                make_cmd += shlex.split(self.makeargs)
-            self.execute(lambda: subprocess.call(make_cmd), [],
-                         'Compiling Unicycler: ' + ' '.join(make_cmd))
-            cpp_code = os.path.join('unicycler', 'cpp_functions.so')
-            if not os.path.isfile(cpp_code):
-                sys.exit("Error: compilation of Unicycler's C++ component failed")
-
-            install.run(self)
-
-            # Copy non-Python stuff to the installation directory.
-            shutil.copyfile(cpp_code, os.path.join(self.install_lib, 'unicycler',
-                                                   'cpp_functions.so'))
+            # # Copy non-Python stuff to the installation directory.
+            # shutil.copyfile(cpp_code, os.path.join(self.install_lib, 'unicycler',
+            #                                        'cpp_functions.so'))
             gene_data_source_dir = os.path.join('unicycler', 'gene_data')
             gene_data_dest_dir = os.path.join(self.install_lib, 'unicycler', 'gene_data')
             if not os.path.exists(gene_data_dest_dir):
@@ -215,11 +215,12 @@ setup(name='unicycler',
       author_email='rrwick@gmail.com',
       license='GPL',
       packages=['unicycler'],
-      entry_points={"console_scripts": ['unicycler = unicycler.unicycler:main',
-                                        'unicycler_align = unicycler.unicycler_align:main',
-                                        'unicycler_check = unicycler.unicycler_check:main',
-                                        'unicycler_polish = unicycler.unicycler_polish:main',
-                                        'unicycler_scrub = unicycler.unicycler_scrub:main']},
+      # entry_points={"console_scripts": ['unicycler = unicycler.unicycler:main',
+      #                                   'unicycler_align = unicycler.unicycler_align:main',
+      #                                   'unicycler_check = unicycler.unicycler_check:main',
+      #                                   'unicycler_polish = unicycler.unicycler_polish:main',
+      #                                   'unicycler_scrub = unicycler.unicycler_scrub:main']},
+      entry_points={"console_scripts": ['unicycler_polish = unicycler.unicycler_polish:main']}
       zip_safe=False,
       cmdclass={'install': UnicyclerInstall,
                 'clean': UnicyclerClean,
