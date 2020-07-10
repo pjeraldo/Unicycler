@@ -220,7 +220,7 @@ setup(name='unicycler',
       #                                   'unicycler_check = unicycler.unicycler_check:main',
       #                                   'unicycler_polish = unicycler.unicycler_polish:main',
       #                                   'unicycler_scrub = unicycler.unicycler_scrub:main']},
-      entry_points={"console_scripts": ['unicycler_polish = unicycler.unicycler_polish:main']}
+      entry_points={"console_scripts": ['unicycler_polish = unicycler.unicycler_polish:main']},
       zip_safe=False,
       cmdclass={'install': UnicyclerInstall,
                 'clean': UnicyclerClean,
