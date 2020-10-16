@@ -209,7 +209,7 @@ entry_points={"console_scripts": ['unicycler = unicycler.unicycler:main',
                                 'unicycler_align = unicycler.unicycler_align:main',
                                 'unicycler_check = unicycler.unicycler_check:main',
                                 'unicycler_polish = unicycler.unicycler_polish:main',
-                                'unicycler_scrub = unicycler.unicycler_scrub:main']},
+                                'unicycler_scrub = unicycler.unicycler_scrub:main']}
 setup(name='unicycler',
       version=__version__,
       description='bacterial genome assembler for hybrid read sets',
