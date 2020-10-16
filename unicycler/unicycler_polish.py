@@ -962,14 +962,22 @@ def align_illumina_reads(fasta, args, make_bam_index=True, local=False, keep_una
 
 def align_pacbio_reads(fasta, args):
     reads = args.pb_bam if args.pb_bam else args.pb_fasta
+    # command = [args.pbmm2, 'align', '--num-threads', str(args.threads),
+    #            '--min-length', str(args.min_align_length),
+    #            '--best-n', '1', '--sort', '--log-level','DEBUG',
+    #            reads, fasta, 'pbmm2_alignments.bam']
     command = [args.pbmm2, 'align', '--num-threads', str(args.threads),
                '--min-length', str(args.min_align_length),
-               '--best-n', '1', '--sort', '--log-level','DEBUG',
-               reads, fasta, 'pbmm2_alignments.bam']
+               '--best-n', '1', '--log-level','DEBUG',
+               reads, fasta, '|', args.samtools, 'sort',
+               '-@',str(min(4,args.threads)),'-l','1','-T','pbmm2aln',
+               '-o','pbmm2_alignments.bam']
 
     run_command(command, args, nice=True)
-    if args.pb_legacy:
-        run_command([args.pbindex, 'pbmm2_alignments.bam'], args)
+    # if args.pb_legacy:
+    #     run_command([args.pbindex, 'pbmm2_alignments.bam'], args)
+    run_command([args.pbindex, 'pbmm2_alignments.bam'], args)
+    run_command([args.samtools, 'index','pbmm2_alignments.bam'], args)
 
     files = get_all_files_in_current_dir()
     if 'pbmm2_alignments.bam' not in files:
@@ -1017,7 +1025,8 @@ def get_gcpp_variants(fasta, args, raw_gcpp_variants):
 def run_gcpp(fasta, args, raw_variants_filename):
     subprocess.call([args.samtools, 'faidx', fasta])
     command = [args.gcpp, 'pbmm2_alignments.bam', '-j', str(args.threads),
-               '--no-evidence-call', 'reference', '-r', fasta, '-o', raw_variants_filename]
+               '--no-evidence-call', 'reference', '-r', fasta,
+               '--log-level', 'DEBUG', '-o', raw_variants_filename]
     run_command(command, args, nice=True)
     if raw_variants_filename not in get_all_files_in_current_dir():
         sys.exit('Error: gcpp failed to make ' + raw_variants_filename)
