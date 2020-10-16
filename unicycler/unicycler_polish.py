@@ -970,7 +970,7 @@ def align_pacbio_reads(fasta, args):
                '--min-length', str(args.min_align_length),
                '--best-n', '1', '--log-level','DEBUG',
                reads, fasta, '|', args.samtools, 'sort',
-               '-@',str(min(4,args.threads)),'-l','1','-T','pbmm2aln',
+               '--threads',str(min(4,args.threads)),'-l','1','-T','pbmm2aln',
                '-o','pbmm2_alignments.bam']
 
     run_command(command, args, nice=True)
