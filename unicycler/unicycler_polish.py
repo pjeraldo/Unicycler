@@ -962,22 +962,19 @@ def align_illumina_reads(fasta, args, make_bam_index=True, local=False, keep_una
 
 def align_pacbio_reads(fasta, args):
     reads = args.pb_bam if args.pb_bam else args.pb_fasta
-    # command = [args.pbmm2, 'align', '--num-threads', str(args.threads),
-    #            '--min-length', str(args.min_align_length),
-    #            '--best-n', '1', '--sort', '--log-level','DEBUG',
-    #            reads, fasta, 'pbmm2_alignments.bam']
     command = [args.pbmm2, 'align', '--num-threads', str(args.threads),
                '--min-length', str(args.min_align_length),
                '--best-n', '1', '--log-level','DEBUG',
-                fasta, reads, '|', args.samtools, 'sort',
-               '--threads',str(min(4,args.threads)),'-l','1','-T','pbmm2aln',
-               '-o','pbmm2_alignments.bam']
-
+               reads, fasta, 'pbmm2_unsorted.bam']
     run_command(command, args, nice=True)
+#sort bam
+    run_command([args.samtools, 'sort','--threads',str(min(4,args.threads)),'-l','1','-T','pbmm2aln',
+                   '-o','pbmm2_alignments.bam','pbmm2_unsorted.bam'],args)
     # if args.pb_legacy:
     #     run_command([args.pbindex, 'pbmm2_alignments.bam'], args)
     run_command([args.pbindex, 'pbmm2_alignments.bam'], args)
     run_command([args.samtools, 'index','pbmm2_alignments.bam'], args)
+    run_command(['rm','-v','pbmm2_unsorted.bam'], args)
 
     files = get_all_files_in_current_dir()
     if 'pbmm2_alignments.bam' not in files:
