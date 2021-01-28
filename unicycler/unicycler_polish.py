@@ -1277,7 +1277,7 @@ def finish(current, all_ale_scores, round_num, args, short):
 
         if args.verbosity > 0:
             print_table(ale_results_table, alignments='LRR', row_colour={best_table_row: 'green'},
-                        row_extra_text={best_table_row: ' ' + get_left_gcpp() + 'best'},
+                        row_extra_text={best_table_row: ' ' + get_left_arrow() + 'best'},
                         leading_newline=True,
                         sub_colour=sub_colour)
 
